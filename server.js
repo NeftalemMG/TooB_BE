@@ -57,35 +57,23 @@ import { connectDB } from './lib/db.js';
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Configure allowed origins
-const allowedOrigins = [
-  process.env.CLIENT_URL || 'http://localhost:3000',
-  'https://your-frontend-domain.vercel.app', // Add your Vercel frontend domain here once deployed
-];
-
-// Enhanced CORS configuration
+// Configure CORS
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json({ limit: "10mb"}));
 app.use(cookieParser());
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK' });
+// Add a root route handler
+app.get('/', (req, res) => {
+  res.json({ message: 'Toob API is running' });
+});
+
+// Add a health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'healthy' });
 });
 
 app.use('/api/auth', authRoutes);
@@ -98,17 +86,31 @@ app.use('/api/orders', orderRoutes);
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
+  res.status(500).json({ 
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+  });
 });
 
-// Handle 404 routes
+// Handle 404
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
-    connectDB();
-});
+const startServer = async () => {
+  try {
+    await connectDB();
+    console.log('Connected to MongoDB');
+    
+    app.listen(port, () => {
+      console.log(`Server listening on port ${port}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
 
-export default app; 
+startServer();
+
+export default app;
