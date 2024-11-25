@@ -39,10 +39,6 @@
 // });
 
 
-
-import dotenv from 'dotenv';
-dotenv.config();
-
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -57,23 +53,34 @@ import { connectDB } from './lib/db.js';
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Configure CORS
+// Configure allowed origins
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://toob-git-main-yoboinef-2000s-projects.vercel.app', // Your frontend URL
+  process.env.CLIENT_URL
+];
+
+// Enhanced CORS configuration
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json({ limit: "10mb"}));
 app.use(cookieParser());
 
-// Add a root route handler
+// Health check endpoint
 app.get('/', (req, res) => {
   res.json({ message: 'Toob API is running' });
-});
-
-// Add a health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'healthy' });
 });
 
 app.use('/api/auth', authRoutes);
@@ -83,25 +90,16 @@ app.use('/api/coupon', couponRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/orders', orderRoutes);
 
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ 
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
-  });
-});
-
-// Handle 404
-app.use((req, res) => {
-  res.status(404).json({ message: 'Route not found' });
+  res.status(500).json({ message: 'Something went wrong!' });
 });
 
 const startServer = async () => {
   try {
     await connectDB();
     console.log('Connected to MongoDB');
-    
     app.listen(port, () => {
       console.log(`Server listening on port ${port}`);
     });
