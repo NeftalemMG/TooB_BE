@@ -15,47 +15,34 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Define allowed origins with regex for Vercel preview deployments
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://toob-ruddy.vercel.app',
-  /^https:\/\/toob-.*-yoboinef-2000s-projects\.vercel\.app$/,
-  /^https:\/\/toob-.*\.vercel\.app$/
-];
+// const allowedOrigins = [
+//   'http://localhost:3000',
+//   'https://toob-ruddy.vercel.app',
+//   /^https:\/\/toob-.*-yoboinef-2000s-projects\.vercel\.app$/,
+//   /^https:\/\/toob-.*\.vercel\.app$/
+// ];
 
 // Enhanced CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // For development/testing - allow requests with no origin
-    if (!origin) {
-      return callback(null, true);
-    }
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://toob-ruddy.vercel.app',
+      /^https:\/\/toob-.*\.vercel\.app$/
+    ];
 
-    // Check if origin matches any of our allowed patterns
-    const isAllowed = allowedOrigins.some(allowed => {
-      if (allowed instanceof RegExp) {
-        return allowed.test(origin);
-      }
-      return origin === allowed;
-    });
-
-    if (isAllowed) {
+    if (!origin || allowedOrigins.some(allowed => 
+      allowed instanceof RegExp ? allowed.test(origin) : allowed === origin
+    )) {
       callback(null, true);
     } else {
-      console.log('Blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 86400 // CORS preflight cache for 24 hours
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 };
 
 // Apply CORS configuration
@@ -81,6 +68,27 @@ app.get('/', (req, res) => {
     environment: process.env.NODE_ENV
   });
 });
+
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
+
+// Enhance your error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path,
+    method: req.method
+  });
+  
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
 
 // Routes
 app.use('/api/auth', authRoutes);
