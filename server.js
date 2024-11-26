@@ -14,20 +14,34 @@ import { connectDB } from './lib/db.js';
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Define allowed origins
+// Define allowed origins with regex for Vercel preview deployments
 const allowedOrigins = [
   'http://localhost:3000',
   'https://toob-ruddy.vercel.app',
-  'https://toob-git-main-yoboinef-2000s-projects.vercel.app'
+  /^https:\/\/toob-.*-yoboinef-2000s-projects\.vercel\.app$/,
+  /^https:\/\/toob-.*\.vercel\.app$/
 ];
 
-// CORS configuration
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // For development/testing - allow requests with no origin
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Check if origin matches any of our allowed patterns
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return origin === allowed;
+    });
+
+    if (isAllowed) {
       callback(null, true);
     } else {
+      console.log('Blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -39,16 +53,33 @@ app.use(cors({
     'X-Requested-With',
     'Accept',
     'Origin'
-  ]
-}));
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400 // CORS preflight cache for 24 hours
+};
+
+// Apply CORS configuration
+app.use(cors(corsOptions));
 
 // Basic middleware
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
+// Add request logging in development
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`);
+    next();
+  });
+}
+
 // Health check route
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'TOOB API is running' });
+  res.json({ 
+    status: 'ok', 
+    message: 'TOOB API is running',
+    environment: process.env.NODE_ENV
+  });
 });
 
 // Routes
@@ -74,7 +105,7 @@ const startServer = async () => {
     await connectDB();
     console.log('Connected to MongoDB');
     app.listen(port, () => {
-      console.log(`Server running on port ${port}`);
+      console.log(`Server running on port ${port} in ${process.env.NODE_ENV} mode`);
     });
   } catch (error) {
     console.error('Server startup error:', error);
@@ -83,4 +114,5 @@ const startServer = async () => {
 };
 
 startServer();
+
 export default app;
