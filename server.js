@@ -64,7 +64,7 @@ if (process.env.NODE_ENV !== 'production') {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'ok', 
-    message: 'TOOB API is running',
+    message: 'TOOB API is running. Trust me daddy',
     environment: process.env.NODE_ENV
   });
 });
