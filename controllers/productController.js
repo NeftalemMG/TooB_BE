@@ -16,28 +16,61 @@ export const getAllProducts = async (req, res) => {
 };
 
 
+// export const getFeaturedProducts = async (req, res) => {
+//     try {
+//         let featuredProducts = await redis.get("featured_products");
+//         if (featuredProducts) {
+//             return res.json(JSON.parse(featuredProducts));
+//         }
+
+//         featuredProducts = await Product.find({ isFeatured: true }).lean();
+//         if (!featuredProducts || featuredProducts.length === 0) {
+//             return res.status(404).json({ message: "No featured products found" });
+//         }
+
+//         // store in redis for future use
+//         await redis.set("featured_products", JSON.stringify(featuredProducts), "EX", 3600); // Cache for 1 hour
+
+//         res.json(featuredProducts);
+//     } catch (error) {
+//         console.log("Error in getFeaturedProducts controller", error.message);
+//         res.status(500).json({ message: "Server error", error: error.message });
+//     }
+// }
+
 export const getFeaturedProducts = async (req, res) => {
-    try {
-        let featuredProducts = await redis.get("featured_products");
-        if (featuredProducts) {
-            return res.json(JSON.parse(featuredProducts));
-        }
+  try {
+      let featuredProducts;
+      
+      try {
+          const cachedProducts = await redis.get("featured_products");
+          if (cachedProducts) {
+              return res.json(JSON.parse(cachedProducts));
+          }
+      } catch (redisError) {
+          console.log('Redis error, falling back to database:', redisError);
+      }
 
-        featuredProducts = await Product.find({ isFeatured: true }).lean();
-        if (!featuredProducts || featuredProducts.length === 0) {
-            return res.status(404).json({ message: "No featured products found" });
-        }
+      // If Redis fails or no cached data, get from MongoDB
+      featuredProducts = await Product.find({ isFeatured: true }).lean();
+      
+      if (!featuredProducts || featuredProducts.length === 0) {
+          return res.status(404).json({ message: "No featured products found" });
+      }
 
-        // store in redis for future use
-        await redis.set("featured_products", JSON.stringify(featuredProducts), "EX", 3600); // Cache for 1 hour
+      // Try to cache but don't fail if Redis is unavailable
+      try {
+          await redis.set("featured_products", JSON.stringify(featuredProducts), "EX", 3600);
+      } catch (redisCacheError) {
+          console.log('Failed to cache in Redis:', redisCacheError);
+      }
 
-        res.json(featuredProducts);
-    } catch (error) {
-        console.log("Error in getFeaturedProducts controller", error.message);
-        res.status(500).json({ message: "Server error", error: error.message });
-    }
-}
-
+      res.json(featuredProducts);
+  } catch (error) {
+      console.error("Error in getFeaturedProducts controller:", error);
+      res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
 
 export const createProduct = async (req, res) => {

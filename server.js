@@ -68,6 +68,18 @@ app.get('/', (req, res) => {
     environment: process.env.NODE_ENV
   });
 });
+app.get('/api', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'TOOB API endpoints are available',
+    availableRoutes: {
+      products: '/api/products',
+      featured: '/api/products/featured',
+      auth: '/api/auth',
+      orders: '/api/orders'
+    }
+  });
+});
 
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
@@ -100,13 +112,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/orders', orderRoutes);
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({
-    message: 'Internal server error',
-    error: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
+
 
 // Start server
 const startServer = async () => {
