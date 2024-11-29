@@ -37,38 +37,77 @@ export const getAllProducts = async (req, res) => {
 //         res.status(500).json({ message: "Server error", error: error.message });
 //     }
 // }
-
 export const getFeaturedProducts = async (req, res) => {
+  let timeoutId;
+  
   try {
-      let featuredProducts;
-      
-      try {
-          const cachedProducts = await redis.get("featured_products");
-          if (cachedProducts) {
-              return res.json(JSON.parse(cachedProducts));
+      const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+              reject(new Error('Operation timed out'));
+          }, 8000); // 8 second timeout
+      });
+
+      const getFeaturedProductsPromise = async () => {
+          try {
+              // Try Redis first, but with a short timeout
+              const cachedData = await Promise.race([
+                  redis.get("featured_products"),
+                  new Promise((_, reject) => 
+                      setTimeout(() => reject(new Error('Redis timeout')), 1000)
+                  )
+              ]);
+
+              if (cachedData) {
+                  return JSON.parse(cachedData);
+              }
+          } catch (redisError) {
+              console.log('Redis error or timeout, falling back to database');
           }
-      } catch (redisError) {
-          console.log('Redis error, falling back to database:', redisError);
-      }
 
-      // If Redis fails or no cached data, get from MongoDB
-      featuredProducts = await Product.find({ isFeatured: true }).lean();
-      
-      if (!featuredProducts || featuredProducts.length === 0) {
-          return res.status(404).json({ message: "No featured products found" });
-      }
+          // Fallback to MongoDB
+          const products = await Product.find({ isFeatured: true })
+              .select('name price description image category isFeatured')
+              .lean()
+              .exec();
 
-      // Try to cache but don't fail if Redis is unavailable
-      try {
-          await redis.set("featured_products", JSON.stringify(featuredProducts), "EX", 3600);
-      } catch (redisCacheError) {
-          console.log('Failed to cache in Redis:', redisCacheError);
-      }
+          if (!products || products.length === 0) {
+              throw new Error('No featured products found');
+          }
 
-      res.json(featuredProducts);
+          // Try to cache in Redis but don't wait for it
+          redis.set("featured_products", JSON.stringify(products), "EX", 3600)
+              .catch(error => console.log('Redis caching failed:', error));
+
+          return products;
+      };
+
+      const result = await Promise.race([
+          getFeaturedProductsPromise(),
+          timeoutPromise
+      ]);
+
+      clearTimeout(timeoutId);
+      res.json(result);
+
   } catch (error) {
-      console.error("Error in getFeaturedProducts controller:", error);
-      res.status(500).json({ message: "Server error", error: error.message });
+      clearTimeout(timeoutId);
+      console.error('getFeaturedProducts error:', error);
+      
+      if (error.message === 'Operation timed out') {
+          return res.status(504).json({ 
+              message: 'Request timed out', 
+              error: 'Operation took too long to complete' 
+          });
+      }
+      
+      if (error.message === 'No featured products found') {
+          return res.status(404).json({ message: error.message });
+      }
+
+      res.status(500).json({ 
+          message: 'Server error', 
+          error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message 
+      });
   }
 };
 
